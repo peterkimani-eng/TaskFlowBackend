@@ -30,8 +30,6 @@ router.get('/admin/users',async(req,res)=>{
 
 router.post('/user/signIn',async(req,res)=>{
     try{
-        console.log("sign in initiated");
-
          let uSer;
         const user = await Users.create({
             fullName:req.body.form.fullName,
@@ -42,8 +40,8 @@ router.post('/user/signIn',async(req,res)=>{
          .then(uSer= await Users.find({userName:user.userName}))  
         */
          res.json(user._id);
-        console.log(user._id);
     }catch(err){
+        console.log(req.body.form.fullName);
         res.status(500).json({error:err.message});
     }
 });
