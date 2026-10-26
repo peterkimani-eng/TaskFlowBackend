@@ -5,6 +5,11 @@ const authRoutes=require('./authentication')
 require('dotenv').config();
 
 
+const {getUser}=require('./user-services');
+const { getTasks } = require('./task-services');
+const {getTasks}  =require('./task-services');
+
+
 const app = express();
 
 app.use(cors());
@@ -80,12 +85,17 @@ app.get('/tasks', async (req, res) => {
 
 app.get('/tasks/:userId', async (req, res) => {
   try {
-    const tasks = await Task.find({userId:req.params.userId}).sort({orderId:-1});
-    res.json(tasks); 
+    const user = await getUser(req.params.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const tasks = await getTasks(req.params.userId );
+    if (!tasks.length) return res.status(404).json({ error: "No tasks yet" });
+
+    res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+})
 
 app.get('/tasks/:id/:userId', async (req, res) => {
   try {
