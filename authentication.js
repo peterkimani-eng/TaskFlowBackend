@@ -29,42 +29,37 @@ router.get('/admin/users',async(req,res)=>{
 })
 
 router.post('/user/signIn',async(req,res)=>{
-    try{
-         let uSer;
-        const user = await Users.create({
-            fullName:req.body.form.fullName,
-            userName:req.body.form.userName,
-            password:req.body.form.password
-        });
-       /*await Users.create(user)
-         .then(uSer= await Users.find({userName:user.userName}))  
-        */
-         res.json(user._id);
-    }catch(err){
-        console.log(req.body.form.fullName);
-        res.status(500).json({error:err.message});
-    }
+   try {
+    const { fullName, userName, password } = req.body.form || {};
+    if (!fullName || !userName || !password)
+      return res.status(400).json({ error: "All fields required" });
+
+    const exists = await findByUserName(userName);
+    if (exists) return res.status(409).json({ error: "Username already taken" });
+
+    const user = await createUser(req.body.form);
+    res.status(201).json({ userId: user._id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/user/logIn',async(req,res)=>{
-    try{ 
-        const user=await Users.findOne({userName:req.body.userName});
-        if(!user){
-            res.status(401).json("error");
-        }else{
-              const match = await bcrypt.compare(req.body.password, user.password);
+    try {
+    const { userName, password } = req.body.form || req.body;
+    if (!userName || !password)
+      return res.status(400).json({ error: "Username and password required" });
 
-            if (match){
-            res.json(user._id);
-        }else{9
-            res.status(201).json({error:'Invalid credentials'});
-        }
-        }
-        
+    const user = await findByUserName(userName);
+    if (!user) return res.status(401).json({ error: "User not found" });
 
-    }catch{
-        res.status(500).json({ error: err.message });
-    }
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ error: "Invalid credentials" });
+
+    res.json({ userId: user._id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 })
 
 module.exports= router;

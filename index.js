@@ -6,9 +6,8 @@ require('dotenv').config();
 
 
 const {getUser}=require('./user-services');
-const { getTasks } = require('./task-services');
-const {getTasks}  =require('./task-services');
-
+const { getTasks,getTasksById,createTask,swapTaskOrder,updateTaskTitle} = require('./task-services');
+const {toggleTaskStatus,deleteTask}=require('./task-services');
 
 const app = express();
 
@@ -37,40 +36,7 @@ const taskSchema = new mongoose.Schema({
 const Task = mongoose.model('Task', taskSchema);
 
 
-// 3. HYBRID SYNC ENDPOINT (The secret sauce for offline apps)
-// The local app hits this when it goes back online, sending a timestamp of its last sync.
- /*app.post('/tasks/sync', async (req, res) => {
-  try {
-    const { lastSyncTime, localChanges } = req.body;
 
-    // A. Save changes that happened offline to the Cloud Database
-    if (localChanges && localChanges.length > 0) {
-      for (const change of localChanges) {
-        if (change.type === 'CREATE' || change.type === 'UPDATE') {
-          await Task.findByIdAndUpdate(
-            change.id || new mongoose.Types.ObjectId(), 
-            { task: change.task, status: change.status }, 
-            { upsert: true, new: true }
-          );
-        } else if (change.type === 'DELETE') {
-          await Task.findByIdAndDelete(change.id);
-        }
-      }
-    }
-
-    // B. Pull changes down from the Cloud that the client missed while offline
-    const query = lastSyncTime ? { updatedAt: { $gt: new Date(lastSyncTime) } } : {};
-    const serverUpdates = await Task.find(query);
-
-    res.json({
-      success: true,
-      serverUpdates,
-      serverTime: new Date().toISOString()
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});    */
 
 
 // GET all tasks
@@ -83,7 +49,7 @@ app.get('/tasks', async (req, res) => {
   }
 });
 
-app.get('/tasks/:userId', async (req, res) => {
+app.get('/tasks/userId', async (req, res) => {
   try {
     const user = await getUser(req.params.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -93,13 +59,18 @@ app.get('/tasks/:userId', async (req, res) => {
 
     res.json(tasks);
   } catch (err) {
+    console.log(req.params.userId)
     res.status(500).json({ error: err.message });
   }
 })
 
-app.get('/tasks/:id/:userId', async (req, res) => {
+app.get('/tasks/id/userId', async (req, res) => {
   try {
-    const tasks = await Task.findById(req.params.id);
+    const user = await getUser(req.params.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const tasks = await getTasksById(req.params.id );
+    if (!tasks.length) return res.status(404).json({ error: "No tasks yet" }); 
 
     res.json(tasks); 
   } catch (err) {
@@ -108,70 +79,87 @@ app.get('/tasks/:id/:userId', async (req, res) => {
 });
 
 // POST a new task
-app.post('/tasks/:userId', async (req, res) => {
+app.post('/tasks/userId', async (req, res) => {
   try {
-    const task = await Task.create({
-      dateCreated:req.body.dateCreated,
-      task: req.body.task, 
-      status:false,
-      orderId:req.body.orderId,
-      userId:req.params.userId
-    });
-   // Task.create(task);
+    const user = await getUser(req.params.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const task = await createTask(req.params.userId, req.body);
     res.status(201).json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/tasks/order/update/:userId',async(req,res)=>{
-  try {
-    const {id1,id2}=req.body.ids;
-    const task1=await Task.findById(id1);
-    const task2=await Task.findById(id2);
-    const tempId=task1.orderId;
-    task1.orderId=task2.orderId;
-    task2.orderId=tempId;
-    await task1.save();
-    await task2.save();
-    res.json({task1,task2});
+app.put('/tasks/order/update/userId',async(req,res)=>{
+   try {
+    const user = await getUser(req.params.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const { id1, id2 } = req.body.ids;
+    if (!id1 || !id2) return res.status(400).json({ error: "Two ids required" });
+
+    const result = await swapTaskOrder(id1, id2);
+    res.json(result);
   } catch (err) {
-    res.status(500);
+    if (err.message === "Task not found")
+      return res.status(404).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
    
 })
 
 // PUT update task title
-app.put('/tasks/:id/:userId', async (req, res) => {
+app.put('/tasks/id/userId', async (req, res) => {
   try {
-    const updatedTask = await Task.findByIdAndUpdate(
-      req.params._id, 
-      { task: req.body.title }, 
-      { new: true }
-    );
+    const user = await getUser(req.params.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const { _id } = req.params;
+    const { title } = req.body;
+    if (!_id || !title) return res.status(400).json({ error: "id and title required" });
+
+    const updatedTask = await updateTaskTitle(_id, title);
+    if (!updatedTask) return res.status(404).json({ error: "Task not found" });
+
     res.json(updatedTask);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+
 });
 
 // PUT toggle status
-app.put('/tasks/status/:userId/:id', async (req, res) => {
+app.put('/tasks/status/userId/id', async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id);
-    task.status = !task.status; 
-    await task.save();
+    const user = await getUser(req.params.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: "id required" });
+
+    const task = await toggleTaskStatus(id);
     res.json(task);
   } catch (err) {
+    if (err.message === "Task not found")
+      return res.status(404).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
 
 // DELETE a task
-app.delete('/tasks/:userId/:id', async (req, res) => {
+app.delete('/tasks/userId/id', async (req, res) => {
   try {
-    await Task.findByIdAndDelete(req.params.id);
-    res.send("deleted");
+    const user = await getUser(req.params.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: "id required" });
+
+    const deleted = await deleteTask(id);
+    if (!deleted) return res.status(404).json({ error: "Task not found" });
+
+    res.json({ message: "Task deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
