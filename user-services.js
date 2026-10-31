@@ -1,3 +1,6 @@
-const Users=require('./authentication.js');
+const {Users}=require('./models');
 
-exports.getUser=(userId)=>Users.findOne({userId});
+
+exports.getUser = async (userId) => {
+  return await Users.findById(userId);
+};

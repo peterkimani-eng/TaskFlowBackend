@@ -3,6 +3,7 @@ const mongoose=require('mongoose');
 const bcrypt=require('bcryptjs');
 const router=express.Router();
 
+const{findByUserName,createUser,findUsers}=require('./auth-services');
 
 const app=express();
 
@@ -10,21 +11,10 @@ const app=express();
 app.use(express.json());
 
 
-const userDbSchema= new mongoose.Schema({
-    fullName:{type:String,required:true},
-    userName:{type:String,required:true},
-    password:{type:String,required:true}
-},{timestamps:true});  
 
-userDbSchema.pre('save', async function () {
-  if (!this.isModified('password')) return;
-  this.password = await bcrypt.hash(this.password, 10);
-});
-
-const Users= mongoose.model('Users',userDbSchema);
 
 router.get('/admin/users',async(req,res)=>{
-    const users= await Users.find();
+    const users= await findUsers();
     res.json(users);
 })
 
@@ -45,8 +35,9 @@ router.post('/user/signIn',async(req,res)=>{
 });
 
 router.post('/user/logIn',async(req,res)=>{
+  console.log(req.body);
     try {
-    const { userName, password } = req.body.form || req.body;
+    const { userName, password } = req.body;
     if (!userName || !password)
       return res.status(400).json({ error: "Username and password required" });
 

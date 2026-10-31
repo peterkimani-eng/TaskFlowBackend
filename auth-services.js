@@ -1,7 +1,11 @@
-const Users=require('./authentication');
+const {Users}=require('./models');
 const bcrypt=require('bcryptjs');
 
-exports.findByUserName = (userName) => Users.findOne({ userName });
+exports.findUsers=async()=>{return(Users.find());}
+
+exports.findByUserName = async(userName) =>{return( Users.findOne({ userName }));}
+
+
 
 exports.createUser = async (form) => {
   const hashed = await bcrypt.hash(form.password, 10);
